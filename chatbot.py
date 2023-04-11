@@ -1,9 +1,11 @@
 import re
 import numpy as np
+import tensorflow as tf
+import time
 
 
 # Data Preprocessing
-# Data load
+## Data load
 basic_path = "./data/Cornell Movie-Dialogs Corpus"
 lines = (
     open(f"{basic_path}/movie_lines.txt", encoding="utf-8", errors="ignore")
@@ -17,8 +19,8 @@ conversations = (
 )
 
 
-# Data mapping
-# Extract data
+## Data mapping
+### Extract data
 id2line = dict()
 for line in lines:
     _line = line.split(" +++$+++ ")
@@ -32,7 +34,7 @@ for conversation in conversations[:-1]:
     )
     conversation_ids.append(_conversation.split(","))
 
-# Create questions and answers
+### Create questions and answers
 questions = []
 answers = []
 for conversation in conversation_ids:
@@ -41,8 +43,8 @@ for conversation in conversation_ids:
         answers.append(id2line[conversation[i + 1]])
 
 
-# Data cleanning > 대소문자 맞춤, 축약어 제거 및 변경 등
-def clean_text(text):
+### Data cleanning > 대소문자 맞춤, 축약어 제거 및 변경 등
+def clean_text(text: str) -> str:
     text = text.lower()
     text = re.sub(r"i'm", "i am", text)
     text = re.sub(r"he's", "he is", text)
@@ -65,8 +67,8 @@ clean_questions = [clean_text(question) for question in questions]
 clean_answers = [clean_text(answer) for answer in answers]
 
 
-# Remove infrequency word
-# Word counting
+## Remove infrequency word
+### Word counting
 word2count = dict()
 for question in clean_questions:
     for word in question.split():
@@ -77,12 +79,10 @@ for answer in clean_answers:
         word2count[word] = 1 if (cnt := word2count.get(word)) == None else cnt + 1
 
 
-# Word to integer & Remove infrequency word
-
+### Word to integer & Remove infrequency word
 """
     !!! questions 와 answers 를 위환 dictionary 를 따로 만든 이유에 대해 질의 남기기 !!!
 """
-
 threshold = 20
 
 questionswords2int = dict()
@@ -99,21 +99,21 @@ for word, count in word2count.items():
         answerswords2int[word] = answer_word_number
         answer_word_number += 1
 
-# Add special tokens in word dictionary
+## Add special tokens in word dictionary
 tokens = ["<PAD>", "<EOS>", "<OUT>", "<SOS>"]
 for token in tokens:
     questionswords2int[token] = len(questionswords2int) + 1
 for token in tokens:
     answerswords2int[token] = len(answerswords2int) + 1
 
-# Make reverse dictionary(only answer dictionary)
+### Make reverse dictionary(only answer dictionary)
 answersint2words = {w_i: w for w, w_i in answerswords2int.items()}
 
-# Add <EOS> Token in answer data
+### Add <EOS> Token in answer data
 for i in range(len(clean_answers)):
     clean_answers[i] += " <EOS>"
 
-# Change word 2 int in answer data
+### Change word 2 int in answer data
 questions_into_int = list()
 for question in clean_questions:
     ints = []
@@ -138,7 +138,7 @@ for answer in clean_answers:
 
 
 ## Sorting questions and answers by the length of quetions
-# 강의에서 사용한 코드 (오래걸림)
+### 강의에서 사용한 코드 (오래걸림)
 # sorted_clean_questions = list()
 # sorted_clean_answers = list()
 # for length in range(1, 25 + 1):
@@ -147,7 +147,7 @@ for answer in clean_answers:
 #             sorted_clean_questions.append(questions_into_int[i[0]])
 #             sorted_clean_answers.append(answers_into_int[i[0]])
 
-# 새롭게 짠 코드
+### 새롭게 짠 코드
 max_length = 25
 length2questions = {i + 1: list() for i in range(max_length)}
 length2answers = {i + 1: list() for i in range(max_length)}
@@ -157,3 +157,21 @@ for i, q_int in enumerate(questions_into_int):
         length2answers[q_length].append(answers_into_int[i])
 sorted_clean_questions = sum(length2questions.values(), [])
 sorted_clean_answers = sum(length2answers.values(), [])
+
+
+# Sequence-to-Sequence Modeling
+## Creating placeholders for the inputs and the targets
+def model_inputs():
+    inputs = tf.compat.v1.placeholder(tf.int32, shape=[None, None], name="input")
+    targets = tf.compat.v1.placeholder(tf.int32, shape=[None, None], name="target")
+    lr = tf.compat.v1.placeholder(tf.float32, name="learning_rate")
+    keep_prob = tf.compat.v1.placeholder(tf.float32, name="keep_prob")
+    return inputs, targets, lr, keep_prob
+
+
+## Preprocessing the targets
+def preprocess_targets(targets, word2int: dict, batch_size: int) -> tf.Tensor:
+    left_side = tf.fill([batch_size, 1], word2int["<SOS>"])
+    right_side = tf.strided_slice(targets, [0, 0], [batch_size, -1], [1, 1])
+    preprocessed_targets = tf.concat([left_side, right_side], 1)
+    return preprocessed_targets
