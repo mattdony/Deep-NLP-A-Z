@@ -2,3 +2,10 @@
 
 
 [강의 바로가기](https://www.udemy.com/course/best-deep-learning-nlp-chatbot/)
+
+
+- 실습환경
+    - Ubuntu 20.04.5 LTS
+    - Python 3.8.10
+    - Tensorflow 2.10.1
+    - Cuda 11.8
